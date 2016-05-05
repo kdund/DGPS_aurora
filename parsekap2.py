@@ -225,6 +225,8 @@ def readData(dgpsstations,dgpsfolder,eiscatname):
     #remove NANs- periods with no EISCAT data: 
     
     indices = ~np.isnan(tec)
+
+
     tec = tec[indices]
     time = time[indices]
     data = data[indices]
@@ -257,7 +259,8 @@ def chunkData(arrs,alphas):
 
 if __name__=="__main__":
     #load data: 
-    stations = ["bju","kap","got","hol","hob"]
+    stations = ["kap","bju","got"]
+    #stations = ["bju","hol","got","kul"]
     folder ="FTPDL"
     eiscatname = "EISCAT201205to201605.txt"
 
@@ -274,7 +277,7 @@ if __name__=="__main__":
     time = np.load("time.npy")
     data = np.load("data.npy")
 
-    if True: 
+    if False: 
         for i in range(data.shape[1]):
             mean = np.mean(data[:,i])
             sdev = np.std(data[:,i])
@@ -290,6 +293,19 @@ if __name__=="__main__":
     print tec.shape
     print time.shape
     print data.shape
+
+    if False: 
+        tec = np.sqrt(data[:,1]**2+data[:,3]**2+data[:,5]**2)
+
+        #print tec
+
+        data[:,1]=0
+        data[:,2]=0
+        data[:,3]=0
+        data[:,4]=0
+        data[:,5]=0
+        data[:,6]=0
+
     teccs,timecs,datacs = chunkData([tec,time,data],split)
     (tec_train,tec_test,tec_validate)=teccs
     (time_train,time_test,time_validate)=timecs
@@ -301,16 +317,29 @@ if __name__=="__main__":
     from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor
     from sklearn import gaussian_process
 
-    #fitter = SVR(kernel='rbf',C=1e2)
+
+    cs = np.logspace(0,4,100)
+    mses = np.zeros(100)
+    for i,c in enumerate(cs): 
+        fitter = SVR(kernel='rbf',C=c)
+        tec_test_fit = fitter.fit(data_train,tec_train).predict(data_test)
+        mses[i] = np.mean((tec_test_fit-tec_test)**2)
+        print c,mses[i]
+
+    imax = np.argmin(mses)
+
+
+
     #fitter = AdaBoostRegressor(n_estimators=50)
     #fitter = gaussian_process.GaussianProcess()
-    fitter = LinearRegression()
+    #fitter = LinearRegression()
 
 
 
 
 
-    tec_validate_fit = fitter.fit(data_train,tec_train).predict(data_validate)
+    fitter2 = SVR(kernel='rbf',C=cs[imax])
+    tec_validate_fit = fitter2.fit(data_train,tec_train).predict(data_validate)
 
     print fitter.get_params(deep=True)
     #coefs = fitter.coef_
@@ -321,7 +350,7 @@ if __name__=="__main__":
 
     #MSE: 
     mse = np.mean((tec_validate_fit-tec_validate)**2)
-    print "smse",np.sqrt(mse)
+    #print "smse",np.sqrt(mse)
     #print fitter.coef_
 
 
@@ -339,9 +368,13 @@ if __name__=="__main__":
 
     ax1.scatter(data_validate[:,-1],tec_validate_fit/tec_validate)
     ax2.scatter(tec_validate,tec_validate_fit,alpha=0.5)
-    #ax2.plot([0,30],[0,30])
+    ax2.plot([0,1],[0,1])
+    #ax2.set_xlim([0,2])
+    #ax2.set_ylim([0,2])
     ax2.set_aspect('equal')
-    ax3.hist(tec_validate_fit/tec_validate)
+    #ax3.hist(tec_validate_fit/tec_validate)
+    ax3.plot(cs,mses)
+    ax3.set_xscale('log')
 
     plt.savefig("fittest.pdf")
 
